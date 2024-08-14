@@ -7,10 +7,22 @@ import (
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"github.com/muesli/reflow/wordwrap"
 	"github.com/sahilmulla/poke-tui/pkgs/domain"
 	"github.com/sahilmulla/poke-tui/pkgs/styles"
 )
+
+func RenderVarieties(d PokemonDetail) string {
+	varieties := []string{}
+	for _, v := range d.Species.Varieties {
+		varieties = append(varieties, styles.TransformTitle(v.Pokemon.Name))
+	}
+
+	return styles.SectionStyle.Render(lipgloss.JoinVertical(lipgloss.Left,
+		styles.SectionTitleStyle.MarginBottom(1).Render("FORMS"),
+		lipgloss.NewStyle().Italic(true).Render(
+			wordwrap.String(strings.Join(varieties, ", "), 48))))
+}
 
 func heightValue(value float64, unit domain.Unit) string {
 	switch unit {
@@ -23,7 +35,7 @@ func heightValue(value float64, unit domain.Unit) string {
 			roundedInches = 0
 		}
 
-		return fmt.Sprintf(`%d'%d"`, ft, roundedInches)
+		return fmt.Sprintf(`%d' %d"`, ft, roundedInches)
 	default:
 		return fmt.Sprintf("%.1f m", value/10)
 	}
@@ -36,7 +48,6 @@ func weightValue(value float64, unit domain.Unit) string {
 		return fmt.Sprintf("%.1f kgs", value/10)
 	}
 }
-
 func RenderInfo(d PokemonDetail, unit domain.Unit) string {
 	height := heightValue(float64(d.Info.HeightDecimeter), unit)
 	weight := weightValue(float64(d.Info.WeightHectogram), unit)
@@ -45,11 +56,11 @@ func RenderInfo(d PokemonDetail, unit domain.Unit) string {
 		lipgloss.Top,
 		styles.SectionStyle.Render(lipgloss.JoinVertical(lipgloss.Left, styles.SectionTitleStyle.MarginBottom(1).Render("HEIGHT"), height)),
 		styles.SectionStyle.Render(lipgloss.JoinVertical(lipgloss.Left, styles.SectionTitleStyle.MarginBottom(1).Render("WEIGHT"), weight)),
-		styles.SectionStyle.Render(lipgloss.JoinVertical(lipgloss.Left, styles.SectionTitleStyle.MarginBottom(1).Render("GENDER"), func() string {
+		styles.SectionStyle.Render(lipgloss.JoinVertical(lipgloss.Left, styles.SectionTitleStyle.MarginBottom(1).Render("GENDER %"), func() string {
 			gr := float32(d.Species.GenderRate)
 			switch {
 			case gr < 0:
-				return "X"
+				return "Genderless"
 			default:
 				return fmt.Sprintf("%.1f M %.1f F", (8-gr)/8*100, gr/8*100)
 			}
@@ -66,7 +77,7 @@ func RenderAbilities(d PokemonDetail) string {
 			slot = "HID"
 		}
 		slot = lipgloss.NewStyle().Foreground(styles.AccentColor).Render(slot)
-		abilities = append(abilities, slot+" "+styles.FormatTitle(a.Ability.Name))
+		abilities = append(abilities, slot+" "+styles.TransformTitle(a.Ability.Name))
 	}
 	return styles.SectionStyle.Render(
 		lipgloss.JoinHorizontal(lipgloss.Top,
@@ -75,7 +86,11 @@ func RenderAbilities(d PokemonDetail) string {
 }
 
 func RenderEvolutionTree(d PokemonDetail) string {
-	return styles.SectionStyle.Render(lipgloss.JoinVertical(lipgloss.Left, styles.SectionTitleStyle.Render("Evolutions"), renderEvolutionTree([]chain{d.Evolutions.Chain}, d.Info.Species.Name, 1)))
+	babyLegend := lipgloss.NewStyle().Foreground(styles.IsBabyColor).Render("■") + " BABY"
+	title := styles.SectionTitleStyle.MarginRight(3).Render("Evolutions")
+	return styles.SectionStyle.Render(lipgloss.JoinVertical(lipgloss.Left,
+		lipgloss.JoinHorizontal(lipgloss.Top, title, babyLegend),
+		renderEvolutionTree([]chain{d.Evolutions.Chain}, d.Info.Species.Name, 1)))
 }
 
 func renderEvolutionTree(c []chain, infoName string, depth int) string {
@@ -83,10 +98,16 @@ func renderEvolutionTree(c []chain, infoName string, depth int) string {
 		return ""
 	}
 
-	speciesStyle := func(val string, highlight bool) string {
-		s := lipgloss.NewStyle().Bold(highlight).Underline(highlight)
+	speciesStyle := func(val string, isBaby, highlight bool) string {
+		s := lipgloss.NewStyle().
+			Bold(highlight).
+			Underline(highlight)
 
-		return s.Render(styles.FormatTitle(val))
+		if isBaby {
+			s = s.Foreground(lipgloss.ANSIColor(styles.IsBabyColor))
+		}
+
+		return s.Render(styles.TransformTitle(val))
 	}
 
 	rows := []string{}
@@ -98,26 +119,37 @@ func renderEvolutionTree(c []chain, infoName string, depth int) string {
 		case idx == 0:
 			connector = "┬"
 		case idx == len(c)-1:
-			connector = "└"
+			// connector = "└"
+			connector = "╰"
 		}
 		connector = lipgloss.NewStyle().Faint(true).Render(" " + connector + "→ ")
 		if depth == 1 {
 			connector = ""
 		}
 
-		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, connector+speciesStyle(evo.Species.Name, evo.Species.Name == infoName), renderEvolutionTree(evo.EvolvesTo, infoName, depth+1)))
+		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, connector+speciesStyle(evo.Species.Name, evo.IsBaby, evo.Species.Name == infoName), renderEvolutionTree(evo.EvolvesTo, infoName, depth+1)))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
 func RenderStats(d PokemonDetail, statBars *[]progress.Model) string {
+	statWidth := 24
 	stats := []string{styles.SectionTitleStyle.MarginBottom(1).Render("Base Stats")}
+	statVal, statTitle := "", ""
 	for idx, stat := range d.Info.Stats {
-		statTitle := styles.FormatTitle(stat.Stat.Name)
-		statVal := lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%d", stat.Base))
-		statTitle += lipgloss.NewStyle().Faint(true).Render(strings.Repeat(".", 22-len(statTitle)-lipgloss.Width(statVal)))
+		statTitle = styles.TransformTitle(stat.Stat.Name)
+		statVal = lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%d", stat.Base))
+		statTitle += lipgloss.NewStyle().Faint(true).Render(strings.Repeat(".", statWidth-len(statTitle)-lipgloss.Width(statVal)))
 		stats = append(stats, statTitle+statVal+" ["+(*statBars)[idx].View()+"]")
 	}
+
+	stats = append(stats, lipgloss.NewStyle().Faint(true).Render(strings.Repeat(".", statWidth)))
+
+	statTitle = "TOTAL"
+	statVal = lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%d", d.Info.StatsTotal))
+	statTitle += lipgloss.NewStyle().Faint(true).Render(strings.Repeat(".", statWidth-len(statTitle)-lipgloss.Width(statVal)))
+	stats = append(stats, lipgloss.NewStyle().Render(statTitle+statVal))
+
 	return styles.SectionStyle.Render(lipgloss.JoinVertical(lipgloss.Left, stats...))
 }
 
@@ -130,11 +162,10 @@ func RenderHeader(d PokemonDetail) string {
 		}()).
 		Padding(0, 1).
 		Bold(true).
-		Render(styles.FormatTitle(d.Info.Name))
+		Render(styles.TransformTitle(d.Info.Name))
 
 	typeInfo := ""
 	typeStyle := lipgloss.NewStyle().
-		Background(lipgloss.ANSIColor(termenv.ANSIBrightWhite)).
 		Padding(0, 1).
 		Bold(true)
 	for _, t := range d.Info.Types {

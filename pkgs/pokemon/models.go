@@ -19,7 +19,8 @@ type (
 				Name string `json:"name"`
 			} `json:"stat"`
 		} `json:"stats"`
-		Species struct {
+		StatsTotal int
+		Species    struct {
 			Name string `json:"name"`
 			Url  string `json:"url"`
 		} `json:"species"`
@@ -38,8 +39,13 @@ type (
 		} `json:"abilities"`
 	}
 	PokemonSpeciesResponse struct {
-		GenderRate     int `json:"gender_rate"`
-		CaptureRate    int `json:"capture_rate"`
+		GenderRate  int `json:"gender_rate"`
+		CaptureRate int `json:"capture_rate"`
+		Varieties   []struct {
+			Pokemon struct {
+				Name string `json:"name"`
+			} `json:"pokemon"`
+		} `json:"varieties"`
 		EvolutionChain struct {
 			Url string `json:"url"`
 		} `json:"evolution_chain"`
@@ -48,6 +54,7 @@ type (
 		Species struct {
 			Name string `json:"name"`
 		} `json:"species"`
+		IsBaby    bool    `json:"is_baby"`
 		EvolvesTo []chain `json:"evolves_to"`
 	}
 	EvolutionChainResponse struct {

@@ -178,7 +178,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.details = msg.data
 		for idx, stat := range m.details.Info.Stats {
 			newStat := progress.New(
-				progress.WithScaledGradient("#e24", "#2b8"),
+				progress.WithScaledGradient("#e44", "#2b8"),
 				progress.WithWidth(25))
 			newStat.Full = rune('∎')
 			newStat.Empty = rune('-')
@@ -222,10 +222,11 @@ func renderPokemonDetails(m model) string {
 	content := lipgloss.JoinVertical(lipgloss.Left,
 		header,
 		pokemon.RenderInfo(m.details, m.unit),
-		pokemon.RenderAbilities(m.details),
 		pokemon.RenderStats(m.details, &m.statBars),
+		pokemon.RenderAbilities(m.details),
 		pokemon.RenderEvolutionTree(m.details),
-		strings.Repeat("-", lipgloss.Width(header)))
+		pokemon.RenderVarieties(m.details),
+		strings.Repeat("─", lipgloss.Width(header)))
 
 	return content
 }
@@ -241,7 +242,7 @@ func (m model) View() string {
 		s += lipgloss.Place(48, 20,
 			lipgloss.Center, lipgloss.Center,
 			lipgloss.NewStyle().Render(msg),
-			lipgloss.WithWhitespaceChars("+"),
+			lipgloss.WithWhitespaceChars("`"),
 			lipgloss.WithWhitespaceForeground(lipgloss.ANSIColor(termenv.ANSIBrightBlack)))
 	case POKEMON_LIST:
 		s += styles.DocStyle.Render(m.pokemonList.View())
@@ -297,7 +298,7 @@ type item struct {
 }
 
 func (i item) Title() string       { return i.title }
-func (i item) FilterValue() string { return i.title }
+func (i item) FilterValue() string { return strings.ReplaceAll(i.title, "-", " ") }
 
 type itemDelegate struct{}
 
@@ -309,7 +310,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 	if !ok {
 		return
 	}
-	str := styles.FormatTitle(i.Title())
+	str := styles.TransformTitle(i.Title())
 
 	render := styles.ItemStyle.Render
 	if index == m.Index() {

@@ -32,6 +32,7 @@ var PokemonTypeToColor = map[string]string{
 
 var (
 	AccentColor = lipgloss.ANSIColor(termenv.ANSIYellow)
+	IsBabyColor = lipgloss.ANSIColor(termenv.ANSIBrightMagenta)
 
 	ItemStyle         = lipgloss.NewStyle().PaddingLeft(1).BorderStyle(lipgloss.HiddenBorder()).BorderLeft(true)
 	SelectedItemStyle = ItemStyle.Foreground(AccentColor).Bold(true).BorderStyle(lipgloss.ThickBorder()).BorderForeground(AccentColor)
@@ -42,6 +43,6 @@ var (
 	DocStyle = lipgloss.NewStyle().Margin(1).MarginLeft(0)
 )
 
-func FormatTitle(s string) string {
+func TransformTitle(s string) string {
 	return cases.Title(language.English).String(strings.ReplaceAll(s, "-", " "))
 }

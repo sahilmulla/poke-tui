@@ -64,6 +64,10 @@ func GetPokemon(name string) PokemonDetail {
 		}
 	}
 
+	for _, val := range data.Info.Stats {
+		data.Info.StatsTotal += val.Base
+	}
+
 	return *data
 }
 
