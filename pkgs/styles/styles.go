@@ -39,7 +39,7 @@ var (
 	SectionStyle      = lipgloss.NewStyle().BorderStyle(lipgloss.HiddenBorder()).BorderForeground(AccentColor).Padding(0, 1)
 	SectionTitleStyle = lipgloss.NewStyle().Padding(0, 1).MarginBottom(1).Background(AccentColor).Foreground(lipgloss.Color("15")).Bold(true).Transform(strings.ToUpper)
 
-	DocStyle = lipgloss.NewStyle().MarginBottom(1)
+	DocStyle = lipgloss.NewStyle().Margin(1).MarginLeft(0)
 )
 
 func FormatTitle(s string) string {

@@ -2,19 +2,49 @@ package pokemon
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
+	"github.com/sahilmulla/poke-tui/pkgs/domain"
 	"github.com/sahilmulla/poke-tui/pkgs/styles"
 )
 
-func RenderInfo(d PokemonDetail) string {
+func heightValue(value float64, unit domain.Unit) string {
+	switch unit {
+	case domain.US:
+		in := value * 3.937
+		ft := int(in / 12)
+		roundedInches := int(math.Round(in - float64(ft*12)))
+		if roundedInches == 12 {
+			ft++
+			roundedInches = 0
+		}
+
+		return fmt.Sprintf(`%d'%d"`, ft, roundedInches)
+	default:
+		return fmt.Sprintf("%.1f m", value/10)
+	}
+}
+func weightValue(value float64, unit domain.Unit) string {
+	switch unit {
+	case domain.US:
+		return fmt.Sprintf("%.1f lbs", value/4.536)
+	default:
+		return fmt.Sprintf("%.1f kgs", value/10)
+	}
+}
+
+func RenderInfo(d PokemonDetail, unit domain.Unit) string {
+	height := heightValue(float64(d.Info.HeightDecimeter), unit)
+	weight := weightValue(float64(d.Info.WeightHectogram), unit)
+
 	return lipgloss.JoinHorizontal(
 		lipgloss.Top,
-		styles.SectionStyle.Render(lipgloss.JoinVertical(lipgloss.Left, styles.SectionTitleStyle.MarginBottom(1).Render("HEIGHT"), fmt.Sprintf("%.1f m", float32(d.Info.HeightDecimeter)/10))),
-		styles.SectionStyle.Render(lipgloss.JoinVertical(lipgloss.Left, styles.SectionTitleStyle.MarginBottom(1).Render("WEIGHT"), fmt.Sprintf("%.1f kgs", float32(d.Info.WeightHectogram)/10))),
+		styles.SectionStyle.Render(lipgloss.JoinVertical(lipgloss.Left, styles.SectionTitleStyle.MarginBottom(1).Render("HEIGHT"), height)),
+		styles.SectionStyle.Render(lipgloss.JoinVertical(lipgloss.Left, styles.SectionTitleStyle.MarginBottom(1).Render("WEIGHT"), weight)),
 		styles.SectionStyle.Render(lipgloss.JoinVertical(lipgloss.Left, styles.SectionTitleStyle.MarginBottom(1).Render("GENDER"), func() string {
 			gr := float32(d.Species.GenderRate)
 			switch {
@@ -70,7 +100,7 @@ func renderEvolutionTree(c []chain, infoName string, depth int) string {
 		case idx == len(c)-1:
 			connector = "└"
 		}
-		connector = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Faint(true).Render(" " + connector + "→ ")
+		connector = lipgloss.NewStyle().Faint(true).Render(" " + connector + "→ ")
 		if depth == 1 {
 			connector = ""
 		}

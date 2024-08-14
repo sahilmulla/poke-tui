@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
@@ -15,6 +16,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
+	"github.com/sahilmulla/poke-tui/pkgs/domain"
 	"github.com/sahilmulla/poke-tui/pkgs/pokemon"
 	"github.com/sahilmulla/poke-tui/pkgs/styles"
 )
@@ -23,8 +25,12 @@ type NavState int
 
 const (
 	POKEMON_LIST NavState = iota
+	LOADING_POKEMON_LIST
+
 	POKEMON_DETAILS
 	LOADING_POKEMON_DETAILS
+
+	QUITTING
 )
 
 type model struct {
@@ -33,18 +39,23 @@ type model struct {
 
 	details  pokemon.PokemonDetail
 	statBars []progress.Model
+
+	unit domain.Unit
 }
 
 func initialModel() model {
-	return model{
-		pokemonList: initialPokemonListModel(),
-		navState:    POKEMON_LIST,
-		statBars:    make([]progress.Model, 6),
-	}
+	m :=
+		model{
+			navState: LOADING_POKEMON_LIST,
+			statBars: make([]progress.Model, 6),
+		}
+
+	m.initPokemonList()
+	return m
 }
 
-func initialPokemonListModel() list.Model {
-	l := list.New(getAllPokemonItems(), itemDelegate{}, 0, 0)
+func (m *model) initPokemonList() {
+	l := list.New([]list.Item{}, itemDelegate{}, 0, 0)
 	l.SetShowTitle(false)
 	l.SetStatusBarItemName("pokemon", "pokemons")
 	l.Paginator.Type = paginator.Arabic
@@ -56,10 +67,12 @@ func initialPokemonListModel() list.Model {
 	}
 	l.DisableQuitKeybindings()
 
-	return l
+	m.pokemonList = l
 }
 
-func (m model) Init() tea.Cmd { return nil }
+func (m model) Init() tea.Cmd {
+	return getAllPokemonItems
+}
 
 type (
 	keyMap struct {
@@ -70,6 +83,7 @@ type (
 	}
 	detailKeyMap struct {
 		Back key.Binding
+		Tab  key.Binding
 	}
 )
 
@@ -91,48 +105,58 @@ var (
 			key.WithKeys("backspace"),
 			key.WithHelp("backspace", "list"),
 		),
+		Tab: key.NewBinding(
+			key.WithKeys("tab"),
+			key.WithHelp("tab", "units"),
+		),
 	}
 )
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{detailKeys.Back, k.Quit}
+	return []key.Binding{detailKeys.Tab, detailKeys.Back, k.Quit}
 }
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{k.ShortHelp(), {}}
 }
 
-type DetailsMsg struct {
-	data pokemon.PokemonDetail
+type (
+	DetailsMsg struct {
+		data pokemon.PokemonDetail
+	}
+	GotPokemonsMsg struct {
+		data []list.Item
+	}
+	QuitAppMsg int
+)
+
+func QuitApp() tea.Msg {
+	time.Sleep(600 * time.Millisecond)
+	return QuitAppMsg(0)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds := []tea.Cmd{}
 	switch msg := msg.(type) {
-	case DetailsMsg:
-		m.details = msg.data
-		for idx, stat := range m.details.Info.Stats {
-			newStat := progress.New(
-				progress.WithScaledGradient("#e24", "#2b8"),
-				progress.WithWidth(25))
-			newStat.Full = rune('∎')
-			newStat.Empty = rune('-')
-
-			newStat.ShowPercentage = false
-			newStat.SetSpringOptions(12.0, 1)
-			cmds = append(cmds, newStat.SetPercent(float64(stat.Base)/200))
-			m.statBars[idx] = newStat
-		}
-		m.navState = POKEMON_DETAILS
-
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, keys.Quit):
-			return m, tea.Quit
+			m.navState = QUITTING
+			return m, QuitApp
 
 		case key.Matches(msg, detailKeys.Back):
 			switch m.navState {
 			case POKEMON_DETAILS:
 				m.navState = POKEMON_LIST
+			}
+
+		case key.Matches(msg, detailKeys.Tab):
+			switch m.navState {
+			case POKEMON_DETAILS:
+				if m.unit == domain.US {
+					m.unit = domain.NOT_US
+				} else {
+					m.unit = domain.US
+				}
 			}
 
 		case key.Matches(msg, listAdditionalKeys.Enter):
@@ -147,10 +171,32 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+	case QuitAppMsg:
+		return m, tea.Quit
+
+	case DetailsMsg:
+		m.details = msg.data
+		for idx, stat := range m.details.Info.Stats {
+			newStat := progress.New(
+				progress.WithScaledGradient("#e24", "#2b8"),
+				progress.WithWidth(25))
+			newStat.Full = rune('∎')
+			newStat.Empty = rune('-')
+
+			newStat.ShowPercentage = false
+			newStat.SetSpringOptions(15.0, 1)
+			cmds = append(cmds, newStat.SetPercent(float64(stat.Base)/200))
+			m.statBars[idx] = newStat
+		}
+		m.navState = POKEMON_DETAILS
+
+	case GotPokemonsMsg:
+		m.pokemonList.SetItems(msg.data)
+		m.navState = POKEMON_LIST
 
 	case tea.WindowSizeMsg:
 		w, h := styles.DocStyle.GetFrameSize()
-		m.pokemonList.SetSize(msg.Width-w, msg.Height-h)
+		m.pokemonList.SetSize(msg.Width-w, min(msg.Height-h, 20))
 
 	case progress.FrameMsg:
 		for idx, pModel := range m.statBars {
@@ -171,12 +217,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func renderPokemonDetails(m model) string {
+	header := pokemon.RenderHeader(m.details)
+
 	content := lipgloss.JoinVertical(lipgloss.Left,
-		pokemon.RenderHeader(m.details),
-		pokemon.RenderInfo(m.details),
+		header,
+		pokemon.RenderInfo(m.details, m.unit),
 		pokemon.RenderAbilities(m.details),
 		pokemon.RenderStats(m.details, &m.statBars),
-		pokemon.RenderEvolutionTree(m.details))
+		pokemon.RenderEvolutionTree(m.details),
+		strings.Repeat("-", lipgloss.Width(header)))
 
 	return content
 }
@@ -184,11 +233,15 @@ func (m model) View() string {
 	s := ""
 
 	switch m.navState {
-	case LOADING_POKEMON_DETAILS:
-		s += lipgloss.Place(40, 10,
+	case LOADING_POKEMON_DETAILS, LOADING_POKEMON_LIST, QUITTING:
+		msg := " LOADING "
+		if m.navState == QUITTING {
+			msg = " Gotta Catch 'Em All "
+		}
+		s += lipgloss.Place(48, 20,
 			lipgloss.Center, lipgloss.Center,
-			lipgloss.NewStyle().Render(" LOADING "),
-			lipgloss.WithWhitespaceChars("* "),
+			lipgloss.NewStyle().Render(msg),
+			lipgloss.WithWhitespaceChars("+"),
 			lipgloss.WithWhitespaceForeground(lipgloss.ANSIColor(termenv.ANSIBrightBlack)))
 	case POKEMON_LIST:
 		s += styles.DocStyle.Render(m.pokemonList.View())
@@ -212,15 +265,14 @@ func main() {
 	}
 }
 
-func getAllPokemonItems() []list.Item {
+func getAllPokemonItems() tea.Msg {
 	result := []list.Item{}
 	data := pokemon.GetPokemons()
 
 	for _, el := range data.Results {
 		result = append(result, item{title: el.Name})
 	}
-
-	return result
+	return GotPokemonsMsg{data: result}
 }
 
 var pokemonDetailsCache = map[string]pokemon.PokemonDetail{}
