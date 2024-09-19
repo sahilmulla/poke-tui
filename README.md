@@ -10,6 +10,6 @@ To make myself familiar with go's syntax and way of doing things.
 - [bubbletea](https://github.com/charmbracelet/bubbletea)
 - [lipgloss](https://github.com/charmbracelet/lipgloss)
 
-### Poke-TUI Preview
+## Preview
 
 <img width="800" src="./preview.gif" />
